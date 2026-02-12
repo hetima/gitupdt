@@ -68,6 +68,8 @@ When there are changes in `requirements.txt`, the following process occurs:
 4. `pip install -r requirements.txt` is executed with the selected Python interpreter
 5. You can also choose to cancel and install manually later
 
+The script traverses the repository folders upward. If it finds a folder named `.venv` or `venv`, it checks whether it's a venv environment and presents it as an option. This allows installation from outside a venv environment, but it's safer to activate the venv beforehand.
+
 ## Dependencies
 
 - GitPython
