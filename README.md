@@ -70,7 +70,7 @@ When there are changes in `requirements.txt`, the following process occurs:
 4. Installation is executed with the selected command
 5. You can also choose to cancel and install manually later
 
-The script traverses the repository folders upward. If it finds a folder named `.venv` or `venv`, it checks whether it's a venv environment and presents it as an option. This allows installation from outside a venv environment, but it's safer to activate venv beforehand.
+The script traverses the repository folders upward. If it finds a folder named `.venv` or `venv`, it checks whether it's a venv environment and presents it as an option.
 
 ### Automatic uv sync on pyproject.toml Changes
 
@@ -85,7 +85,7 @@ Note: If there are changes in `pyproject.toml`, the `requirements.txt` change co
 
 ## Changelog
 
-### 1.0.1
+### 1.1.0
 - Added uv support for package installation
   - `uv pip install` and `uv add` options are now available when uv is installed
 - Added pyproject.toml change detection and uv sync
