@@ -4,6 +4,7 @@ import difflib
 import subprocess
 import argparse
 import shutil
+import tomllib
 import git
 from git import InvalidGitRepositoryError
 from questionary import Choice, Separator, select
@@ -164,6 +165,32 @@ def install_requirements(repo, requirements_path):
         print("Skipped: pip installation cancelled by user.")
 
 
+def install_requirements_uv(repo):
+    """
+    uv syncを実行するかキャンセルするかをユーザーに選択させる。
+
+    Args:
+        repo: Gitリポジトリオブジェクト
+    """
+    choices = [
+        Choice(title="uv sync", value="sync"),
+        Separator(),
+        Choice(title="Cancel", value="")
+    ]
+
+    selection = select("Select an action:", choices=choices).ask()
+
+    if selection == "sync":
+        print("Running uv sync...")
+        try:
+            subprocess.run(['uv', 'sync'], check=True)
+            print("uv sync completed successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to run uv sync: {e}")
+    else:
+        print("Skipped: uv sync cancelled by user.")
+
+
 def perform_update(repo, selection, reset=False):
     """
     選択されたアクションを実行する
@@ -179,6 +206,21 @@ def perform_update(repo, selection, reset=False):
 
     action = selection.get('action')
     target = selection.get('target')
+
+    # --- pyproject.toml の変更を追跡する処理 ---
+    before_deps = None
+    pyproject_path = os.path.join(repo.working_tree_dir, 'pyproject.toml')
+    uv_installed = shutil.which('uv') is not None
+    if uv_installed and os.path.isfile(pyproject_path):
+        try:
+            with open(pyproject_path, 'rb') as f:
+                data = tomllib.load(f)
+                # dependenciesセクションを取得
+                deps = data.get('project', {}).get('dependencies', [])
+                # ソートして比較用に文字列化
+                before_deps = sorted(deps)
+        except Exception:
+            pass # ファイルが読めなくても処理は続行
 
     # --- requirements.txt の変更を追跡する処理 ---
     before_reqs = []
@@ -231,7 +273,41 @@ def perform_update(repo, selection, reset=False):
     # --- リポジトリのメンテナンス ---
     print("\nPerforming repository maintenance...")
     repo.git.gc('--auto')
-    
+
+    # --- pyproject.toml の変更を表示 ---
+    pyproject_changed = False
+    if before_deps is not None:
+        after_deps = None
+        try:
+            with open(pyproject_path, 'rb') as f:
+                data = tomllib.load(f)
+                deps = data.get('project', {}).get('dependencies', [])
+                after_deps = sorted(deps)
+        except Exception:
+            pass # ファイルが読めなくても比較は行う
+
+        if after_deps is not None and before_deps != after_deps:
+            pyproject_changed = True
+            print("\n--- Changes in pyproject.toml (dependencies) ---")
+            before_lines = [f"{dep}\n" for dep in before_deps]
+            after_lines = [f"{dep}\n" for dep in after_deps]
+            diff = difflib.unified_diff(
+                before_lines,
+                after_lines,
+                fromfile='before pyproject.toml',
+                tofile='after pyproject.toml',
+            )
+            for line in diff:
+                print(line, end='')
+            print("------------------------------------")
+            print("\nWould you like to run uv sync to update dependencies?")
+            install_requirements_uv(repo)
+
+    # --- requirements.txt の変更を表示 ---
+    # pyproject.tomlが変更されていた場合は、requirements.txtの処理はスキップ
+    if pyproject_changed:
+        return
+
     # --- requirements.txt の変更を表示 ---
     after_reqs = []
     if os.path.exists(reqs_path):
