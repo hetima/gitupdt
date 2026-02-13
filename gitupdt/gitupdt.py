@@ -3,6 +3,7 @@ import sys
 import difflib
 import subprocess
 import argparse
+import shutil
 import git
 from git import InvalidGitRepositoryError
 from questionary import Choice, Separator, select
@@ -25,23 +26,28 @@ def get_sorted_tags(repo):
     return [t[0] for t in valid_tags]
 
 
-def get_appropriate_python(repo_path):
+def get_appropriate_install_command(repo_path):
     """
-    適切なPythonインタープリタのパスをユーザーに選択させる。
-    
+    適切なインストールコマンドをユーザーに選択させる。
+    uvコマンドがインストールされている場合は、uvコマンドを優先的に選択肢に表示する。
+
     Args:
         repo_path: リポジトリのパス
-        
+
     Returns:
-        選択されたPythonのパス、またはキャンセル時は空文字
+        選択されたインストールコマンドの辞書、またはキャンセル時は空文字
+        辞書の形式: {'type': 'uv'|'python', 'command': str, 'description': str}
     """
+    # uvコマンドがインストールされているか確認
+    uv_installed = shutil.which('uv') is not None
+
     # 現在実行されているPythonのパスを取得
     current_python = sys.executable
-    
+
     # venvフォルダを探す
     venv_python = None
     search_path = os.path.abspath(repo_path)
-    
+
     while search_path:
         for venv_name in ['.venv', 'venv']:
             venv_path = os.path.join(search_path, venv_name)
@@ -52,23 +58,38 @@ def get_appropriate_python(repo_path):
                     python_exe = os.path.join(venv_path, 'Scripts', 'python.exe')
                 else:  # Unix系
                     python_exe = os.path.join(venv_path, 'bin', 'python')
-                
+
                 if os.path.isfile(python_exe):
                     venv_python = python_exe
                     break
-        
+
         if venv_python:
             break
-        
+
         # 階層をひとつ上がる
         parent_path = os.path.dirname(search_path)
         if parent_path == search_path:  # ルートディレクトリに到達
             break
         search_path = parent_path
-    
+
     # 選択肢の作成
     choices = []
-    
+
+    # uvコマンドがインストールされている場合は先頭に追加
+    if uv_installed:
+        choices.append(Choice(
+            title="uv pip install",
+            value={'type': 'uv', 'command': 'uv pip install', 'description': 'uv pip install'}
+        ))
+        # uv addはpyproject.tomlが存在する場合のみ追加
+        pyproject_path = os.path.join(repo_path, 'pyproject.toml')
+        if os.path.isfile(pyproject_path):
+            choices.append(Choice(
+                title="uv add",
+                value={'type': 'uv', 'command': 'uv add', 'description': 'uv add'}
+            ))
+        choices.append(Separator())
+
     # Pythonパスを表示用に短縮
     def format_path(path):
         # パスを短く表示（例: C:\Users\...\.venv\Scripts\python.exe）
@@ -77,51 +98,65 @@ def get_appropriate_python(repo_path):
             if len(parts) > 3:
                 return os.path.join('...', *parts[-3:])
         return os.path.normpath(path)
-    
+
     if venv_python and venv_python != current_python:
         choices.append(Choice(
             title=f"Current Python ({format_path(current_python)})",
-            value=current_python
+            value={'type': 'python', 'command': current_python, 'description': f'Current Python ({format_path(current_python)})'}
         ))
         choices.append(Choice(
             title=f"venv ({format_path(venv_python)})",
-            value=venv_python
+            value={'type': 'python', 'command': venv_python, 'description': f'venv ({format_path(venv_python)})'}
         ))
     elif current_python:
         choices.append(Choice(
             title=f"Current Python ({format_path(current_python)})",
-            value=current_python
+            value={'type': 'python', 'command': current_python, 'description': f'Current Python ({format_path(current_python)})'}
         ))
-    
+
     choices.append(Separator())
     choices.append(Choice(title="Cancel", value=""))
-    
+
     # questionaryで選択させる
-    selection = select("Select Python interpreter:", choices=choices).ask()
-    
+    selection = select("Select install command:", choices=choices).ask()
+
     if selection == "":
         return ""
-    
+
     return selection
 
 
 def install_requirements(repo, requirements_path):
     """
-    指定されたPythonインタープリタでrequirements.txtをインストールする。
-    
+    指定されたインストールコマンドでrequirements.txtをインストールする。
+
     Args:
         repo: Gitリポジトリオブジェクト
         requirements_path: requirements.txtのパス
     """
-    python_pass = get_appropriate_python(repo.working_tree_dir)
-    if python_pass:
-        print(f"Installing requirements using: {python_pass}")
+    install_cmd = get_appropriate_install_command(repo.working_tree_dir)
+    if install_cmd:
+        print(f"Installing requirements using: {install_cmd['description']}")
         try:
-            # subprocessでpip installを実行し、出力をターミナルに流す
-            subprocess.run(
-                [python_pass, "-m", "pip", "install", "-r", requirements_path],
-                check=True
-            )
+            if install_cmd['type'] == 'uv':
+                if install_cmd['command'] == 'uv pip install':
+                    # uv pip install -r requirements.txt
+                    subprocess.run(
+                        ['uv', 'pip', 'install', '-r', requirements_path],
+                        check=True
+                    )
+                elif install_cmd['command'] == 'uv add':
+                    # uv add -r requirements.txt
+                    subprocess.run(
+                        ['uv', 'add', '-r', requirements_path],
+                        check=True
+                    )
+            else:
+                # Pythonインタープリタを使用: python -m pip install -r requirements.txt
+                subprocess.run(
+                    [install_cmd['command'], "-m", "pip", "install", "-r", requirements_path],
+                    check=True
+                )
             print("Requirements installed successfully.")
         except subprocess.CalledProcessError as e:
             print(f"Failed to install requirements: {e}")
