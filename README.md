@@ -81,8 +81,6 @@ If uv is installed and `pyproject.toml` exists, the following process occurs:
 3. If you choose `uv sync`, dependencies will be updated
 4. You can also choose to cancel and update manually later
 
-Note: If there are changes in `pyproject.toml`, the `requirements.txt` change confirmation will not be performed.
-
 ## Changelog
 
 ### 1.1.1
