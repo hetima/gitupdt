@@ -167,13 +167,17 @@ def install_requirements(repo, requirements_path):
 
 def install_requirements_uv(repo):
     """
-    uv syncを実行するかキャンセルするかをユーザーに選択させる。
+    uv syncを実行するか、requirements.txtを使用するか、キャンセルするかをユーザーに選択させる。
 
     Args:
         repo: Gitリポジトリオブジェクト
+
+    Returns:
+        str: 選択されたアクション ("sync", "requirements", または None)
     """
     choices = [
         Choice(title="uv sync", value="sync"),
+        Choice(title="use requirements.txt in next task", value="requirements"),
         Separator(),
         Choice(title="Cancel", value="")
     ]
@@ -187,8 +191,10 @@ def install_requirements_uv(repo):
             print("uv sync completed successfully.")
         except subprocess.CalledProcessError as e:
             print(f"Failed to run uv sync: {e}")
-    else:
-        print("Skipped: uv sync cancelled by user.")
+        return "sync"
+    elif selection == "requirements":
+        return "requirements"
+    return None  # キャンセル
 
 
 def perform_update(repo, selection, reset=False):
@@ -301,12 +307,9 @@ def perform_update(repo, selection, reset=False):
                 print(line, end='')
             print("------------------------------------")
             print("\nWould you like to run uv sync to update dependencies?")
-            install_requirements_uv(repo)
-
-    # --- requirements.txt の変更を表示 ---
-    # pyproject.tomlが変更されていた場合は、requirements.txtの処理はスキップ
-    if pyproject_changed:
-        return
+            result = install_requirements_uv(repo)
+            if result != "requirements":
+                return
 
     # --- requirements.txt の変更を表示 ---
     after_reqs = []
