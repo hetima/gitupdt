@@ -83,6 +83,9 @@ uvがインストールされており、`pyproject.toml` が存在する場合�
 
 ## 更新履歴
 
+### 1.1.1
+- `pyproject.toml` をスキップして `requirements.txt` を対象にできるようにしました
+
 ### 1.1.0
 - uvのパッケージインストール対応を追加
   - uvがインストールされている場合、`uv pip install`と`uv add`のオプションが利用可能になりました

@@ -85,6 +85,9 @@ Note: If there are changes in `pyproject.toml`, the `requirements.txt` change co
 
 ## Changelog
 
+### 1.1.1
+- Added the ability to skip `pyproject.toml` and use `requirements.txt` instead.
+
 ### 1.1.0
 - Added uv support for package installation
   - `uv pip install` and `uv add` options are now available when uv is installed
